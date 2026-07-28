@@ -1,0 +1,32 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  max-width: 32rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}
+
+.hidden {
+  display: none;
+}
+
+form,
+section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.error {
+  color: #d33;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  width: fit-content;
+}
