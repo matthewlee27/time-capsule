@@ -25,6 +25,23 @@ def test_save_scrobbles_dedupes_on_repull(conn):
     assert storage.scrobble_count(conn, user_id) == 1
 
 
+def test_save_scrobbles_reports_saved_vs_duplicates(conn):
+    user_id = storage.upsert_user(conn, "alice")
+    first_batch = [
+        {"artist": "A", "track": "Song 1", "album": None, "mbid": None, "played_at": 100},
+        {"artist": "A", "track": "Song 2", "album": None, "mbid": None, "played_at": 200},
+    ]
+    result = storage.save_scrobbles(conn, user_id, first_batch)
+    assert result == {"saved": 2, "duplicates": 0}
+
+    # overlapping re-pull: Song 1 repeats, Song 3 is new
+    second_batch = first_batch[:1] + [
+        {"artist": "A", "track": "Song 3", "album": None, "mbid": None, "played_at": 300},
+    ]
+    result = storage.save_scrobbles(conn, user_id, second_batch)
+    assert result == {"saved": 1, "duplicates": 1}
+
+
 def test_get_scrobbles_orders_newest_first(conn):
     user_id = storage.upsert_user(conn, "alice")
     storage.save_scrobbles(

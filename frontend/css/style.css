@@ -13,6 +13,31 @@ body {
   display: none;
 }
 
+header {
+  margin-bottom: 1.5rem;
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+nav a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+nav a:hover {
+  border-bottom-color: currentColor;
+}
+
+nav a.active {
+  text-decoration: underline;
+}
+
 form,
 section {
   display: flex;

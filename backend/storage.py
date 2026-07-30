@@ -52,17 +52,25 @@ def upsert_user(conn: sqlite3.Connection, username: str) -> int:
     return row[0]
 
 
-def save_scrobbles(conn: sqlite3.Connection, user_id: int, tracks: Iterable[Dict]) -> int:
+def save_scrobbles(conn: sqlite3.Connection, user_id: int, tracks: Iterable[Dict]) -> Dict[str, int]:
     """Inserts pulled tracks, silently skipping ones already stored
     (same user/artist/track/played_at) so re-pulling an overlapping
-    date range is safe. Returns the number of rows attempted."""
+    date range is safe. Returns how many were newly saved vs. already
+    present as duplicates.
+
+    Uses conn.total_changes rather than cur.rowcount to count inserts —
+    rowcount's behavior across executemany + ON CONFLICT DO NOTHING isn't
+    reliably documented, whereas total_changes only increments for rows
+    actually written."""
     now = int(time.time())
     rows = [
         (user_id, t["artist"], t["track"], t.get("album"), t.get("mbid"), t["played_at"], now)
         for t in tracks
     ]
     if not rows:
-        return 0
+        return {"saved": 0, "duplicates": 0}
+
+    changes_before = conn.total_changes
     conn.executemany(
         "INSERT INTO scrobbles (user_id, artist, track, album, mbid, played_at, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?) "
@@ -70,7 +78,8 @@ def save_scrobbles(conn: sqlite3.Connection, user_id: int, tracks: Iterable[Dict
         rows,
     )
     conn.commit()
-    return len(rows)
+    saved = conn.total_changes - changes_before
+    return {"saved": saved, "duplicates": len(rows) - saved}
 
 
 def scrobble_count(conn: sqlite3.Connection, user_id: int) -> int:

@@ -8,7 +8,21 @@ const connectedAs = document.getElementById("connected-as");
 const pullBtn = document.getElementById("pull-btn");
 const pullStatus = document.getElementById("pull-status");
 
-let connectedUsername = null;
+let connectedUsername = getConnectedUsername();
+
+if (connectedUsername) {
+  startBtn.classList.add("hidden");
+  usernameForm.classList.add("hidden");
+  pullSection.classList.remove("hidden");
+  connectedAs.textContent = `Connected as ${connectedUsername}`;
+
+  const lastPull = getLastPull();
+  if (lastPull) {
+    pullStatus.textContent =
+      `Fetched ${lastPull.pulled_from_lastfm} scrobbles — ${lastPull.saved} new, ` +
+      `${lastPull.duplicates} already saved (${lastPull.total_stored} stored total).`;
+  }
+}
 
 startBtn.addEventListener("click", () => {
   startBtn.classList.add("hidden");
@@ -35,6 +49,7 @@ usernameForm.addEventListener("submit", async (e) => {
     }
 
     connectedUsername = data.username;
+    setConnectedUsername(connectedUsername);
     connectedAs.textContent = `Connected as ${connectedUsername}`;
     usernameForm.classList.add("hidden");
     pullSection.classList.remove("hidden");
@@ -66,8 +81,10 @@ pullBtn.addEventListener("click", async () => {
       throw new Error(data.detail || "Pull failed");
     }
 
+    setLastPull(data);
     pullStatus.textContent =
-      `Pulled ${data.pulled_from_lastfm} scrobbles (${data.total_stored} stored total).`;
+      `Fetched ${data.pulled_from_lastfm} scrobbles — ${data.saved} new, ` +
+      `${data.duplicates} already saved (${data.total_stored} stored total).`;
   } catch (err) {
     pullStatus.textContent = err.message;
   }
