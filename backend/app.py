@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -14,9 +15,16 @@ from backend.lastfm_client import HistoryHidden, LastFmClient, LastFmError, User
 
 app = FastAPI(title="Time Capsule")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 lastfm = LastFmClient(api_key=LASTFM_API_KEY)
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "out"
 
 
 def get_db():
@@ -94,4 +102,5 @@ def analyze():
     return FileResponse(FRONTEND_DIR / "analyze.html")
 
 
-app.mount("/", StaticFiles(directory=FRONTEND_DIR), name="frontend")
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

@@ -1,4 +1,4 @@
-// Client-side session state, shared between index.html and analyze.html.
+// Client-side session state, shared between the home and analyze pages.
 // sessionStorage (not localStorage) on purpose — this should clear when
 // the tab closes, not linger indefinitely on someone's machine.
 
@@ -7,24 +7,24 @@ const STORAGE_KEYS = {
   lastPull: "timeCapsule.lastPull",
 };
 
-function getConnectedUsername() {
+export function getConnectedUsername() {
   return sessionStorage.getItem(STORAGE_KEYS.username);
 }
 
-function setConnectedUsername(username) {
+export function setConnectedUsername(username) {
   sessionStorage.setItem(STORAGE_KEYS.username, username);
 }
 
-function clearConnectedUsername() {
+export function clearConnectedUsername() {
   sessionStorage.removeItem(STORAGE_KEYS.username);
   sessionStorage.removeItem(STORAGE_KEYS.lastPull);
 }
 
-function getLastPull() {
+export function getLastPull() {
   const raw = sessionStorage.getItem(STORAGE_KEYS.lastPull);
   return raw ? JSON.parse(raw) : null;
 }
 
-function setLastPull(summary) {
+export function setLastPull(summary) {
   sessionStorage.setItem(STORAGE_KEYS.lastPull, JSON.stringify(summary));
 }
