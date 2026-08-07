@@ -9,7 +9,7 @@ Last.fm every time.
 import sqlite3
 import time
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -89,13 +89,63 @@ def scrobble_count(conn: sqlite3.Connection, user_id: int) -> int:
     return row[0]
 
 
-def get_scrobbles(conn: sqlite3.Connection, user_id: int, limit: int = 50) -> List[Dict]:
+def get_scrobbles(
+    conn: sqlite3.Connection,
+    user_id: int,
+    limit: int = 50,
+    from_ts: Optional[int] = None,
+    to_ts: Optional[int] = None,
+    artist: Optional[str] = None,
+) -> List[Dict]:
+    where = ["user_id = ?"]
+    params: List = [user_id]
+
+    if from_ts is not None:
+        where.append("played_at >= ?")
+        params.append(from_ts)
+    if to_ts is not None:
+        where.append("played_at <= ?")
+        params.append(to_ts)
+    if artist is not None:
+        where.append("artist = ?")
+        params.append(artist)
+
+    params.append(limit)
+
     rows = conn.execute(
-        "SELECT artist, track, album, played_at FROM scrobbles "
-        "WHERE user_id = ? ORDER BY played_at DESC LIMIT ?",
-        (user_id, limit),
+        f"SELECT artist, track, album, played_at FROM scrobbles "
+        f"WHERE {' AND '.join(where)} ORDER BY played_at DESC LIMIT ?",
+        params,
     ).fetchall()
     return [
         {"artist": r[0], "track": r[1], "album": r[2], "played_at": r[3]}
         for r in rows
     ]
+
+
+def get_daily_counts(
+    conn: sqlite3.Connection,
+    user_id: int,
+    from_ts: Optional[int] = None,
+    to_ts: Optional[int] = None,
+    artist: Optional[str] = None,
+) -> List[Dict]:
+    where = ["user_id = ?"]
+    params: List = [user_id]
+
+    if from_ts is not None:
+        where.append("played_at >= ?")
+        params.append(from_ts)
+    if to_ts is not None:
+        where.append("played_at <= ?")
+        params.append(to_ts)
+    if artist is not None:
+        where.append("artist = ?")
+        params.append(artist)
+
+    rows = conn.execute(
+        f"SELECT date(played_at, 'unixepoch') AS day, COUNT(*) FROM scrobbles "
+        f"WHERE {' AND '.join(where)} GROUP BY day ORDER BY day",
+        params,
+    ).fetchall()
+    return [{"date": r[0], "count": r[1]} for r in rows]

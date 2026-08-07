@@ -87,10 +87,31 @@ def pull(req: PullRequest, conn=Depends(get_db)):
     }
 
 @app.get("/api/scrobbles/{username}")
-def list_scrobbles(username: str, limit: int = 50, conn=Depends(get_db)):
+def list_scrobbles(
+    username: str,
+    limit: int = 50,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    artist: Optional[str] = None,
+    conn=Depends(get_db),
+):
     user_id = storage.upsert_user(conn, username)
-    return {"scrobbles": storage.get_scrobbles(conn, user_id, limit)}
+    from_ts = _to_unix(from_date)
+    to_ts = _to_unix(to_date)
+    return {"scrobbles": storage.get_scrobbles(conn, user_id, limit, from_ts, to_ts, artist)}
 
+@app.get("/api/scrobbles/{username}/daily-counts")
+def scrobble_daily_counts(
+    username: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    artist: Optional[str] = None,
+    conn=Depends(get_db),
+):
+    user_id = storage.upsert_user(conn, username)
+    from_ts = _to_unix(from_date)
+    to_ts = _to_unix(to_date)
+    return {"daily_counts": storage.get_daily_counts(conn, user_id, from_ts, to_ts, artist)}
 
 @app.get("/")
 def index():
