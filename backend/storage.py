@@ -149,3 +149,34 @@ def get_daily_counts(
         params,
     ).fetchall()
     return [{"date": r[0], "count": r[1]} for r in rows]
+
+
+def get_top_tracks(
+    conn: sqlite3.Connection,
+    user_id: int,
+    from_ts: Optional[int] = None,
+    to_ts: Optional[int] = None,
+    limit: int = 30,
+) -> List[Dict]:
+    where = ["user_id = ?"]
+    params: List = [user_id]
+
+    if from_ts is not None:
+        where.append("played_at >= ?")
+        params.append(from_ts)
+    if to_ts is not None:
+        where.append("played_at <= ?")
+        params.append(to_ts)
+
+    params.append(limit)
+
+    rows = conn.execute(
+        f"SELECT artist, track, COUNT(*) AS play_count FROM scrobbles "
+        f"WHERE {' AND '.join(where)} GROUP BY artist, track "
+        f"ORDER BY play_count DESC LIMIT ?",
+        params,
+    ).fetchall()
+    return [
+        {"artist": r[0], "track": r[1], "play_count": r[2]}
+        for r in rows
+    ]

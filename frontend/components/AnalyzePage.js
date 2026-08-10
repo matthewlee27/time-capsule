@@ -37,7 +37,7 @@ export default function AnalyzePage() {
     <>
       <p id="status">{status}</p>
 
-      <Dropdown options={["basic"]} value={visualType} onChange={setVisualType} />
+      <Dropdown options={["basic", "topTracks"]} value={visualType} onChange={setVisualType} />
       <button id="visualizer-btn" onClick={() => setShowDashboard(true)}>
         Visualize!
       </button>

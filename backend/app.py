@@ -113,6 +113,19 @@ def scrobble_daily_counts(
     to_ts = _to_unix(to_date)
     return {"daily_counts": storage.get_daily_counts(conn, user_id, from_ts, to_ts, artist)}
 
+@app.get("/api/scrobbles/{username}/top-tracks")
+def scrobble_top_tracks(
+    username: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    limit: int = 30,
+    conn=Depends(get_db),
+):
+    user_id = storage.upsert_user(conn, username)
+    from_ts = _to_unix(from_date)
+    to_ts = _to_unix(to_date)
+    return {"top_tracks": storage.get_top_tracks(conn, user_id, from_ts, to_ts, limit)}
+
 @app.get("/")
 def index():
     return FileResponse(FRONTEND_DIR / "index.html")

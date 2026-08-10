@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { API_BASE } from "@/lib/api";
-import { setLastPull } from "@/lib/session";
+import { setDateRange, setLastPull } from "@/lib/session";
 
 function formatPullStatus(data) {
   return (
@@ -36,6 +36,7 @@ export default function PullSection({ username, initialStatus, onPulled }) {
       }
 
       setLastPull(data);
+      setDateRange({ from_date: fromDate || null, to_date: toDate || null });
       onPulled?.(data);
       setStatus(formatPullStatus(data));
     } catch (err) {
