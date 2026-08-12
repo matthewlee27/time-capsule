@@ -14,6 +14,11 @@ from typing import Dict, List, Tuple
 
 DayCounts = List[Tuple[int, int]]  # sorted (day_ordinal, count) pairs
 
+## as of 8/12 --> these parameters work really well
+
+LIFT_ALPHA = 1.4   # higher = rewards in-window volume more aggressively
+LIFT_BETA = 0.6    # higher = penalizes out-of-window volume more aggressively
+LIFT_EPSILON = 1.0  # smoothing so a song with zero out-of-window plays stays finite
 
 def _prefix_sums(day_counts: DayCounts) -> List[int]:
     prefix = [0] * (len(day_counts) + 1)
@@ -38,18 +43,15 @@ def compute_lift(
     limit: int = 15,
     min_window_plays: int = 5,
 ) -> List[Dict]:
-    """Ranks songs by (plays-per-day inside the window) vs. (plays-per-day
-    across the song's whole history). A lift of 2.0 means the song was
-    played roughly twice as often, per day, during the window as it
-    typically is.
+    """Ranks songs by score_i = S_i^LIFT_ALPHA / (O_i + LIFT_EPSILON)^LIFT_BETA,
+    where S_i is in-window plays and O_i is out-of-window plays for that song.
+    LIFT_ALPHA controls how hard in-window volume is rewarded; LIFT_BETA
+    controls how hard out-of-window volume is penalized — see the constants
+    above this function to retune either.
 
-    +1 smoothing on both rates keeps a song with a single lucky play from
-    reporting infinite lift, and min_window_plays filters out songs that
-    only cleared that smoothing by having near-zero real plays.
+    min_window_plays filters out songs that barely cleared the window at all,
+    independent of how the score above ranks them.
     """
-    span_days = max(span_end - span_start + 1, 1)
-    window_days = max(window_end - window_start + 1, 1)
-
     results = []
     for (artist, track), day_counts in song_series.items():
         prefix = _prefix_sums(day_counts)
@@ -59,9 +61,8 @@ def compute_lift(
         if window_plays < min_window_plays:
             continue
 
-        baseline_rate = (total_plays + 1) / span_days
-        window_rate = (window_plays + 1) / window_days
-        lift = window_rate / baseline_rate
+        out_of_window_plays = total_plays - window_plays
+        score = (window_plays ** LIFT_ALPHA) / ((out_of_window_plays + LIFT_EPSILON) ** LIFT_BETA)
 
         results.append(
             {
@@ -69,7 +70,7 @@ def compute_lift(
                 "track": track,
                 "window_plays": window_plays,
                 "total_plays": total_plays,
-                "lift": round(lift, 3),
+                "lift": round(score, 3),
             }
         )
 
