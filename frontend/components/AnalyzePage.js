@@ -31,18 +31,42 @@ function getStatusSnapshot() {
 export default function AnalyzePage() {
   const status = useSyncExternalStore(subscribeNoop, getStatusSnapshot, getServerStatusSnapshot);
   const [visualType, setVisualType] = useState("basic");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [showDashboard, setShowDashboard] = useState(false);
 
   return (
     <>
       <p id="status">{status}</p>
 
-      <Dropdown options={["basic", "topTracks"]} value={visualType} onChange={setVisualType} />
+      <label htmlFor="from-date">From (optional)</label>
+      <input
+        type="date"
+        id="from-date"
+        value={fromDate}
+        onChange={(e) => setFromDate(e.target.value)}
+      />
+
+      <label htmlFor="to-date">To (optional)</label>
+      <input
+        type="date"
+        id="to-date"
+        value={toDate}
+        onChange={(e) => setToDate(e.target.value)}
+      />
+
+      <Dropdown
+        options={["basic", "topTracks", "liftedTopTracks"]}
+        value={visualType}
+        onChange={setVisualType}
+      />
       <button id="visualizer-btn" onClick={() => setShowDashboard(true)}>
         Visualize!
       </button>
 
-      {showDashboard && <VisualDashboard visualType={visualType} />}
+      {showDashboard && (
+        <VisualDashboard visualType={visualType} fromDate={fromDate} toDate={toDate} />
+      )}
     </>
   );
 }

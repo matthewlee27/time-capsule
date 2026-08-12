@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -11,6 +11,7 @@ from pydantic import BaseModel
 #import functions from storage.py
 from backend import storage
 from backend.config import DATABASE_PATH, LASTFM_API_KEY
+from backend.engines import propLiftEngine
 from backend.lastfm_client import HistoryHidden, LastFmClient, LastFmError, UserNotFound
 
 app = FastAPI(title="Time Capsule")
@@ -125,6 +126,29 @@ def scrobble_top_tracks(
     from_ts = _to_unix(from_date)
     to_ts = _to_unix(to_date)
     return {"top_tracks": storage.get_top_tracks(conn, user_id, from_ts, to_ts, limit)}
+
+@app.get("/api/scrobbles/{username}/lifted-top-tracks")
+def scrobble_lifted_top_tracks(
+    username: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    limit: int = 15,
+    conn=Depends(get_db),
+):
+    user_id = storage.upsert_user(conn, username)
+    span = storage.get_history_span(conn, user_id)
+    if span is None:
+        return {"lifted_top_tracks": []}
+    span_start, span_end = span
+
+    window_start = date.fromisoformat(from_date).toordinal() if from_date else span_start
+    window_end = date.fromisoformat(to_date).toordinal() if to_date else span_end
+
+    series = storage.get_song_daily_series(conn, user_id)
+    results = propLiftEngine.compute_lift(
+        series, span_start, span_end, window_start, window_end, limit=limit
+    )
+    return {"lifted_top_tracks": results}
 
 @app.get("/")
 def index():

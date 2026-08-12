@@ -5,7 +5,6 @@
 const STORAGE_KEYS = {
   username: "timeCapsule.username",
   lastPull: "timeCapsule.lastPull",
-  dateRange: "timeCapsule.dateRange",
 };
 
 export function getConnectedUsername() {
@@ -19,7 +18,6 @@ export function setConnectedUsername(username) {
 export function clearConnectedUsername() {
   sessionStorage.removeItem(STORAGE_KEYS.username);
   sessionStorage.removeItem(STORAGE_KEYS.lastPull);
-  sessionStorage.removeItem(STORAGE_KEYS.dateRange);
 }
 
 export function getLastPull() {
@@ -29,13 +27,4 @@ export function getLastPull() {
 
 export function setLastPull(summary) {
   sessionStorage.setItem(STORAGE_KEYS.lastPull, JSON.stringify(summary));
-}
-
-export function getDateRange() {
-  const raw = sessionStorage.getItem(STORAGE_KEYS.dateRange);
-  return raw ? JSON.parse(raw) : null;
-}
-
-export function setDateRange(range) {
-  sessionStorage.setItem(STORAGE_KEYS.dateRange, JSON.stringify(range));
 }

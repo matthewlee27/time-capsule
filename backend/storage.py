@@ -8,8 +8,9 @@ Last.fm every time.
 
 import sqlite3
 import time
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -180,3 +181,37 @@ def get_top_tracks(
         {"artist": r[0], "track": r[1], "play_count": r[2]}
         for r in rows
     ]
+
+
+def get_song_daily_series(
+    conn: sqlite3.Connection, user_id: int
+) -> Dict[Tuple[str, str], List[Tuple[int, int]]]:
+    """One sorted (day_ordinal, count) array per song, spanning the user's
+    entire history — the sparse structure algorithms.md calls for, built
+    from a single grouped query rather than materializing a dense
+    songs x days matrix."""
+    rows = conn.execute(
+        "SELECT artist, track, date(played_at, 'unixepoch') AS day, COUNT(*) "
+        "FROM scrobbles WHERE user_id = ? GROUP BY artist, track, day ORDER BY artist, track, day",
+        (user_id,),
+    ).fetchall()
+
+    series: Dict[Tuple[str, str], List[Tuple[int, int]]] = {}
+    for artist, track, day, count in rows:
+        series.setdefault((artist, track), []).append((date.fromisoformat(day).toordinal(), count))
+    return series
+
+
+def get_history_span(conn: sqlite3.Connection, user_id: int) -> Optional[Tuple[int, int]]:
+    """The (day_ordinal, day_ordinal) range from a user's first to last
+    stored scrobble — the "0 to N" from algorithms.md, scoped to what's
+    actually been pulled."""
+    row = conn.execute(
+        "SELECT MIN(played_at), MAX(played_at) FROM scrobbles WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    if row[0] is None:
+        return None
+    return (
+        datetime.fromtimestamp(row[0], tz=timezone.utc).date().toordinal(),
+        datetime.fromtimestamp(row[1], tz=timezone.utc).date().toordinal(),
+    )

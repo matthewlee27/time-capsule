@@ -21,7 +21,7 @@ function getServerSnapshot() {
   return null;
 }
 
-export default function Basic() {
+export default function Basic({ fromDate, toDate }) {
   const svgRef = useRef(null);
   const username = useSyncExternalStore(subscribeNoop, getConnectedUsername, getServerSnapshot);
   const [dailyCounts, setDailyCounts] = useState(null);
@@ -30,7 +30,11 @@ export default function Basic() {
   useEffect(() => {
     if (!username) return;
 
-    fetch(`${API_BASE}/scrobbles/${username}/daily-counts`)
+    const params = new URLSearchParams();
+    if (fromDate) params.set("from_date", fromDate);
+    if (toDate) params.set("to_date", toDate);
+
+    fetch(`${API_BASE}/scrobbles/${username}/daily-counts?${params}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) {
@@ -40,7 +44,7 @@ export default function Basic() {
       })
       .then((data) => setDailyCounts(data.daily_counts))
       .catch((err) => setError(err.message));
-  }, [username]);
+  }, [username, fromDate, toDate]);
 
   useEffect(() => {
     if (!dailyCounts || dailyCounts.length === 0 || !svgRef.current) return;
