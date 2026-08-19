@@ -30,6 +30,17 @@ CREATE TABLE IF NOT EXISTS scrobbles (
     created_at INTEGER NOT NULL,
     UNIQUE(user_id, artist, track, played_at)
 );
+
+CREATE TABLE IF NOT EXISTS track_rankings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    range_from INTEGER,
+    range_to INTEGER,
+    artist TEXT NOT NULL,
+    track TEXT NOT NULL,
+    rank INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
 """
 
 
@@ -213,6 +224,33 @@ def get_song_daily_series(
     for artist, track, day, count in rows:
         series.setdefault((artist, track), []).append((date.fromisoformat(day).toordinal(), count))
     return series
+
+
+def save_track_ranking(
+    conn: sqlite3.Connection,
+    user_id: int,
+    from_ts: Optional[int],
+    to_ts: Optional[int],
+    ranked_tracks: List[Dict],
+) -> None:
+    """Stores a user's pairwise-sorted preference order for a date range,
+    replacing whatever ranking was previously saved for that same range.
+    range_from/range_to use `IS` rather than `=` below since either can be
+    NULL (meaning "whole history") and SQLite's `=` never matches NULL."""
+    now = int(time.time())
+    conn.execute(
+        "DELETE FROM track_rankings WHERE user_id = ? AND range_from IS ? AND range_to IS ?",
+        (user_id, from_ts, to_ts),
+    )
+    conn.executemany(
+        "INSERT INTO track_rankings (user_id, range_from, range_to, artist, track, rank, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            (user_id, from_ts, to_ts, t["artist"], t["track"], i, now)
+            for i, t in enumerate(ranked_tracks)
+        ],
+    )
+    conn.commit()
 
 
 def get_history_span(conn: sqlite3.Connection, user_id: int) -> Optional[Tuple[int, int]]:

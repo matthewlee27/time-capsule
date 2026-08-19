@@ -2,7 +2,7 @@ import json
 import random
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +44,15 @@ class PullRequest(BaseModel):
     username: str
     from_date: Optional[str] = None  # "YYYY-MM-DD"
     to_date: Optional[str] = None
+
+class TrackRef(BaseModel):
+    artist: str
+    track: str
+
+class TrackRankingRequest(BaseModel):
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
+    ranked_tracks: List[TrackRef]  # best to worst
 
 PULL_PROGRESS_PHRASES = [
     "Pulled {n} scrobbles",
@@ -154,6 +163,16 @@ def scrobble_top_tracks(
     return {
         "top_tracks": storage.get_top_tracks(conn, user_id, from_ts, to_ts, limit, artist_cap)
     }
+
+@app.post("/api/scrobbles/{username}/ranking")
+def save_track_ranking(username: str, req: TrackRankingRequest, conn=Depends(get_db)):
+    user_id = storage.upsert_user(conn, username)
+    from_ts = _to_unix(req.from_date)
+    to_ts = _to_unix(req.to_date)
+    storage.save_track_ranking(
+        conn, user_id, from_ts, to_ts, [t.model_dump() for t in req.ranked_tracks]
+    )
+    return {"status": "saved", "count": len(req.ranked_tracks)}
 
 @app.get("/api/scrobbles/{username}/date-range")
 def scrobble_date_range(username: str, conn=Depends(get_db)):
