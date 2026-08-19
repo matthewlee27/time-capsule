@@ -56,3 +56,30 @@ def test_get_scrobbles_orders_newest_first(conn):
     rows = storage.get_scrobbles(conn, user_id)
 
     assert [r["track"] for r in rows] == ["New", "Old"]
+
+
+def test_get_top_tracks_artist_cap_limits_per_artist(conn):
+    user_id = storage.upsert_user(conn, "alice")
+    # Distinct play counts per track so ranking is unambiguous: A dominates
+    # (3 songs, all outranking B/C) unless the cap kicks in.
+    play_counts = {
+        ("A", "A0"): 10, ("A", "A1"): 9, ("A", "A2"): 8,
+        ("B", "B0"): 7, ("B", "B1"): 6,
+        ("C", "C0"): 5,
+    }
+    tracks = [
+        {"artist": artist, "track": track, "album": None, "mbid": None, "played_at": t}
+        for (artist, track), count in play_counts.items()
+        for t in range(count)
+    ]
+    storage.save_scrobbles(conn, user_id, tracks)
+
+    uncapped = storage.get_top_tracks(conn, user_id, limit=3)
+    assert [(t["artist"], t["track"]) for t in uncapped] == [
+        ("A", "A0"), ("A", "A1"), ("A", "A2"),
+    ]
+
+    capped = storage.get_top_tracks(conn, user_id, limit=3, artist_cap=1)
+    assert [(t["artist"], t["track"]) for t in capped] == [
+        ("A", "A0"), ("B", "B0"), ("C", "C0"),
+    ]

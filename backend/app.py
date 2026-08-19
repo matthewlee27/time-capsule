@@ -145,12 +145,15 @@ def scrobble_top_tracks(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     limit: int = 30,
+    artist_cap: Optional[int] = None,
     conn=Depends(get_db),
 ):
     user_id = storage.upsert_user(conn, username)
     from_ts = _to_unix(from_date)
     to_ts = _to_unix(to_date)
-    return {"top_tracks": storage.get_top_tracks(conn, user_id, from_ts, to_ts, limit)}
+    return {
+        "top_tracks": storage.get_top_tracks(conn, user_id, from_ts, to_ts, limit, artist_cap)
+    }
 
 @app.get("/api/scrobbles/{username}/date-range")
 def scrobble_date_range(username: str, conn=Depends(get_db)):
@@ -190,6 +193,11 @@ def scrobble_lifted_top_tracks(
 @app.get("/")
 def index():
     return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.get("/calibrate")
+def calibrate():
+    return FileResponse(FRONTEND_DIR / "calibrate.html")
 
 
 @app.get("/analyze")

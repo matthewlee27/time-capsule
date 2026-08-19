@@ -13,6 +13,9 @@ export default function Header() {
         <Link href="/" className={pathname === "/" ? "active" : ""}>
           home
         </Link>
+        <Link href="/calibrate" className={pathname === "/calibrate" ? "active" : ""}>
+          calibrate
+        </Link>
         <Link href="/analyze" className={pathname === "/analyze" ? "active" : ""}>
           analyze
         </Link>

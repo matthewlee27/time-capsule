@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { API_BASE } from "@/lib/api";
+import { useState, useSyncExternalStore } from "react";
 import { getConnectedUsername, getLastPull } from "@/lib/session";
 import VisualDashboard from "@/components/visualDashboard";
 import Dropdown from "@/components/Basics";
+import DateRangePicker, { computeDateError } from "@/components/DateRangePicker";
 
 // Same reasoning as basic.js: sessionStorage doesn't change from outside
 // this tab, so there's nothing to subscribe to — this just makes reading it
@@ -33,19 +33,6 @@ function getStatusSnapshot() {
     : `Connected as ${username} — no history pulled yet.`;
 }
 
-function computeDateError(fromDate, toDate, earliestDate, latestDate) {
-  if (fromDate && earliestDate && fromDate < earliestDate) {
-    return `"From" can't be before ${earliestDate}, your earliest scrobble.`;
-  }
-  if (toDate && latestDate && toDate > latestDate) {
-    return `"To" can't be after ${latestDate}, your latest scrobble.`;
-  }
-  if (fromDate && toDate && fromDate > toDate) {
-    return `"From" must be before "To".`;
-  }
-  return "";
-}
-
 export default function AnalyzePage() {
   const status = useSyncExternalStore(subscribeNoop, getStatusSnapshot, getServerStatusSnapshot);
   const username = useSyncExternalStore(
@@ -60,47 +47,23 @@ export default function AnalyzePage() {
   const [toDate, setToDate] = useState("");
   const [showDashboard, setShowDashboard] = useState(false);
 
-  useEffect(() => {
-    if (!username) return;
-
-    fetch(`${API_BASE}/scrobbles/${username}/date-range`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.earliest || !data.latest) return;
-        setEarliestDate(data.earliest);
-        setLatestDate(data.latest);
-        setFromDate(data.earliest);
-        setToDate(data.latest);
-      });
-  }, [username]);
-
   const dateError = computeDateError(fromDate, toDate, earliestDate, latestDate);
 
   return (
     <>
       <p id="status">{status}</p>
 
-      <label htmlFor="from-date">From</label>
-      <input
-        type="date"
-        id="from-date"
-        value={fromDate}
-        min={earliestDate || undefined}
-        max={toDate || latestDate || undefined}
-        onChange={(e) => setFromDate(e.target.value)}
+      <DateRangePicker
+        username={username}
+        fromDate={fromDate}
+        toDate={toDate}
+        onChangeFrom={setFromDate}
+        onChangeTo={setToDate}
+        onRangeLoaded={(earliest, latest) => {
+          setEarliestDate(earliest);
+          setLatestDate(latest);
+        }}
       />
-
-      <label htmlFor="to-date">To</label>
-      <input
-        type="date"
-        id="to-date"
-        value={toDate}
-        min={fromDate || earliestDate || undefined}
-        max={latestDate || undefined}
-        onChange={(e) => setToDate(e.target.value)}
-      />
-
-      {dateError && <p className="error">{dateError}</p>}
 
       <Dropdown
         options={["basic", "topTracks", "liftedTopTracks"]}

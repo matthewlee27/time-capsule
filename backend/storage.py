@@ -158,7 +158,12 @@ def get_top_tracks(
     from_ts: Optional[int] = None,
     to_ts: Optional[int] = None,
     limit: int = 30,
+    artist_cap: Optional[int] = None,
 ) -> List[Dict]:
+    """Top tracks by play count. With artist_cap set, walks the full
+    ranked list and skips any track once `artist_cap` tracks from that
+    artist are already in the result, so one artist can't crowd out the
+    rest of the list."""
     where = ["user_id = ?"]
     params: List = [user_id]
 
@@ -169,18 +174,26 @@ def get_top_tracks(
         where.append("played_at <= ?")
         params.append(to_ts)
 
-    params.append(limit)
-
-    rows = conn.execute(
+    query = (
         f"SELECT artist, track, COUNT(*) AS play_count FROM scrobbles "
         f"WHERE {' AND '.join(where)} GROUP BY artist, track "
-        f"ORDER BY play_count DESC LIMIT ?",
-        params,
-    ).fetchall()
-    return [
-        {"artist": r[0], "track": r[1], "play_count": r[2]}
-        for r in rows
-    ]
+        f"ORDER BY play_count DESC"
+    )
+
+    if artist_cap is None:
+        rows = conn.execute(query + " LIMIT ?", params + [limit]).fetchall()
+        return [{"artist": r[0], "track": r[1], "play_count": r[2]} for r in rows]
+
+    results: List[Dict] = []
+    counts: Dict[str, int] = {}
+    for artist, track, play_count in conn.execute(query, params):
+        if counts.get(artist, 0) >= artist_cap:
+            continue
+        results.append({"artist": artist, "track": track, "play_count": play_count})
+        counts[artist] = counts.get(artist, 0) + 1
+        if len(results) >= limit:
+            break
+    return results
 
 
 def get_song_daily_series(
