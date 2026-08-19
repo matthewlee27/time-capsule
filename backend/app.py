@@ -127,6 +127,18 @@ def scrobble_top_tracks(
     to_ts = _to_unix(to_date)
     return {"top_tracks": storage.get_top_tracks(conn, user_id, from_ts, to_ts, limit)}
 
+@app.get("/api/scrobbles/{username}/date-range")
+def scrobble_date_range(username: str, conn=Depends(get_db)):
+    user_id = storage.upsert_user(conn, username)
+    span = storage.get_history_span(conn, user_id)
+    if span is None:
+        return {"earliest": None, "latest": None}
+    span_start, span_end = span
+    return {
+        "earliest": date.fromordinal(span_start).isoformat(),
+        "latest": date.fromordinal(span_end).isoformat(),
+    }
+
 @app.get("/api/scrobbles/{username}/lifted-top-tracks")
 def scrobble_lifted_top_tracks(
     username: str,
