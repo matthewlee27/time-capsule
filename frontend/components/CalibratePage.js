@@ -30,6 +30,9 @@ export default function CalibratePage() {
   const [saveError, setSaveError] = useState("");
   const [dirty, setDirty] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState(null);
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibrateResult, setCalibrateResult] = useState(null);
+  const [calibrateError, setCalibrateError] = useState("");
 
   const dateError = computeDateError(fromDate, toDate, earliestDate, latestDate);
 
@@ -42,6 +45,8 @@ export default function CalibratePage() {
     setRankedTracks(null);
     setSaveError("");
     setDirty(false);
+    setCalibrateResult(null);
+    setCalibrateError("");
 
     const params = new URLSearchParams({ limit: String(LIMIT), artist_cap: String(ARTIST_CAP) });
     if (fromDate) params.set("from_date", fromDate);
@@ -78,6 +83,28 @@ export default function CalibratePage() {
         setDirty(false);
       })
       .catch((err) => setSaveError(err.message));
+  }
+
+  function runCalibration() {
+    setCalibrating(true);
+    setCalibrateError("");
+    fetch(`${API_BASE}/scrobbles/${username}/calibrate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_date: fromDate || null,
+        to_date: toDate || null,
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || "Could not calibrate");
+        }
+        setCalibrateResult(data);
+      })
+      .catch((err) => setCalibrateError(err.message))
+      .finally(() => setCalibrating(false));
   }
 
   function handleRankingComplete(sorted) {
@@ -164,7 +191,25 @@ export default function CalibratePage() {
           <button onClick={() => saveRanking(rankedTracks)} disabled={!dirty}>
             {dirty ? "Save order" : "Saved"}
           </button>
-          <button onClick={() => setRankedTracks(null)}>Rank again</button>
+          <button
+            onClick={() => {
+              setRankedTracks(null);
+              setCalibrateResult(null);
+              setCalibrateError("");
+            }}
+          >
+            Rank again
+          </button>
+          <button onClick={runCalibration} disabled={calibrating || dirty}>
+            {calibrating ? "Calibrating…" : "Calibrate my taste"}
+          </button>
+          {calibrateError && <p className="error">{calibrateError}</p>}
+          {calibrateResult && (
+            <p>
+              Fit quality: {Math.round(calibrateResult.correct_fraction * 100)}% of pairs matched your ranking
+              (alpha {calibrateResult.alpha}, beta {calibrateResult.beta})
+            </p>
+          )}
         </>
       )}
     </>

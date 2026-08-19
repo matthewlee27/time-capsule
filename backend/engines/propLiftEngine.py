@@ -42,12 +42,15 @@ def compute_lift(
     window_end: int,
     limit: int = 15,
     min_window_plays: int = 5,
+    alpha: float = LIFT_ALPHA,
+    beta: float = LIFT_BETA,
 ) -> List[Dict]:
-    """Ranks songs by score_i = S_i^LIFT_ALPHA / (O_i + LIFT_EPSILON)^LIFT_BETA,
+    """Ranks songs by score_i = S_i^alpha / (O_i + LIFT_EPSILON)^beta,
     where S_i is in-window plays and O_i is out-of-window plays for that song.
-    LIFT_ALPHA controls how hard in-window volume is rewarded; LIFT_BETA
-    controls how hard out-of-window volume is penalized — see the constants
-    above this function to retune either.
+    alpha controls how hard in-window volume is rewarded; beta controls how
+    hard out-of-window volume is penalized — both default to the global
+    LIFT_ALPHA/LIFT_BETA constants but can be overridden with a per-user fit
+    from propLiftEngineParams.fit_lift_params.
 
     min_window_plays filters out songs that barely cleared the window at all,
     independent of how the score above ranks them.
@@ -62,7 +65,7 @@ def compute_lift(
             continue
 
         out_of_window_plays = total_plays - window_plays
-        score = (window_plays ** LIFT_ALPHA) / ((out_of_window_plays + LIFT_EPSILON) ** LIFT_BETA)
+        score = (window_plays ** alpha) / ((out_of_window_plays + LIFT_EPSILON) ** beta)
 
         results.append(
             {

@@ -41,6 +41,17 @@ CREATE TABLE IF NOT EXISTS track_rankings (
     rank INTEGER NOT NULL,
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS user_lift_params (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    range_from INTEGER,
+    range_to INTEGER,
+    alpha REAL NOT NULL,
+    beta REAL NOT NULL,
+    loss REAL,
+    created_at INTEGER NOT NULL
+);
 """
 
 
@@ -251,6 +262,63 @@ def save_track_ranking(
         ],
     )
     conn.commit()
+
+
+def get_track_ranking(
+    conn: sqlite3.Connection,
+    user_id: int,
+    from_ts: Optional[int],
+    to_ts: Optional[int],
+) -> List[Dict]:
+    """This user's saved best-to-worst ranking for the exact (from_ts, to_ts)
+    range, ordered by rank ascending (0 = best); [] if nothing's saved for
+    that exact range. Same IS-nullable-range matching as save_track_ranking."""
+    rows = conn.execute(
+        "SELECT artist, track, rank FROM track_rankings "
+        "WHERE user_id = ? AND range_from IS ? AND range_to IS ? ORDER BY rank ASC",
+        (user_id, from_ts, to_ts),
+    ).fetchall()
+    return [{"artist": r[0], "track": r[1], "rank": r[2]} for r in rows]
+
+
+def save_user_lift_params(
+    conn: sqlite3.Connection,
+    user_id: int,
+    from_ts: Optional[int],
+    to_ts: Optional[int],
+    alpha: float,
+    beta: float,
+    loss: Optional[float] = None,
+) -> None:
+    """Stores this user's fitted LIFT_ALPHA/LIFT_BETA for a date range,
+    replacing whatever was fitted before for that same range -- same
+    IS-vs-= nullable-range delete-then-insert pattern as save_track_ranking
+    (a UNIQUE constraint wouldn't dedupe across NULL ranges in SQLite)."""
+    now = int(time.time())
+    conn.execute(
+        "DELETE FROM user_lift_params WHERE user_id = ? AND range_from IS ? AND range_to IS ?",
+        (user_id, from_ts, to_ts),
+    )
+    conn.execute(
+        "INSERT INTO user_lift_params (user_id, range_from, range_to, alpha, beta, loss, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (user_id, from_ts, to_ts, alpha, beta, loss, now),
+    )
+    conn.commit()
+
+
+def get_user_lift_params(conn: sqlite3.Connection, user_id: int) -> Optional[Dict]:
+    """This user's most recently fitted (alpha, beta), regardless of what
+    range it was fit on -- a calibration represents general taste, not a
+    range-scoped setting, so this deliberately takes no from_ts/to_ts."""
+    row = conn.execute(
+        "SELECT alpha, beta, loss, created_at FROM user_lift_params "
+        "WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {"alpha": row[0], "beta": row[1], "loss": row[2], "created_at": row[3]}
 
 
 def get_history_span(conn: sqlite3.Connection, user_id: int) -> Optional[Tuple[int, int]]:

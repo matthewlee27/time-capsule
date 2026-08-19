@@ -13,7 +13,7 @@ from pydantic import BaseModel
 #import functions from storage.py
 from backend import storage
 from backend.config import DATABASE_PATH, LASTFM_API_KEY
-from backend.engines import propLiftEngine
+from backend.engines import propLiftEngine, propLiftEngineParams
 from backend.lastfm_client import HistoryHidden, LastFmClient, LastFmError, UserNotFound
 
 app = FastAPI(title="Time Capsule")
@@ -53,6 +53,10 @@ class TrackRankingRequest(BaseModel):
     from_date: Optional[str] = None
     to_date: Optional[str] = None
     ranked_tracks: List[TrackRef]  # best to worst
+
+class CalibrateRequest(BaseModel):
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
 
 PULL_PROGRESS_PHRASES = [
     "Pulled {n} scrobbles",
@@ -174,6 +178,45 @@ def save_track_ranking(username: str, req: TrackRankingRequest, conn=Depends(get
     )
     return {"status": "saved", "count": len(req.ranked_tracks)}
 
+@app.post("/api/scrobbles/{username}/calibrate")
+def calibrate_lift_params(username: str, req: CalibrateRequest, conn=Depends(get_db)):
+    user_id = storage.upsert_user(conn, username)
+    from_ts = _to_unix(req.from_date)
+    to_ts = _to_unix(req.to_date)
+
+    ranking = storage.get_track_ranking(conn, user_id, from_ts, to_ts)
+    if len(ranking) < 2:
+        raise HTTPException(400, "Save a ranking of at least 2 tracks for this range before calibrating")
+
+    span = storage.get_history_span(conn, user_id)
+    if span is None:
+        raise HTTPException(400, "No listening history to calibrate against")
+    span_start, span_end = span
+
+    window_start = date.fromisoformat(req.from_date).toordinal() if req.from_date else span_start
+    window_end = date.fromisoformat(req.to_date).toordinal() if req.to_date else span_end
+
+    series = storage.get_song_daily_series(conn, user_id)
+    ranked_tracks = [(r["artist"], r["track"]) for r in ranking]
+    x, y, kept = propLiftEngineParams.build_log_features(series, window_start, window_end, ranked_tracks)
+    if len(kept) < 2:
+        raise HTTPException(400, "Not enough of the ranked tracks still have play history in this range")
+
+    pairs = propLiftEngineParams.build_pairs(len(kept))
+    fit = propLiftEngineParams.fit_lift_params(x, y, pairs)
+
+    storage.save_user_lift_params(conn, user_id, from_ts, to_ts, fit["alpha"], fit["beta"], fit["loss"])
+
+    return {
+        "alpha": round(fit["alpha"], 4),
+        "beta": round(fit["beta"], 4),
+        "loss": round(fit["loss"], 4),
+        "pairs_evaluated": fit["pairs_evaluated"],
+        "correct_fraction": fit["correct_fraction"],
+        "tracks_used": len(kept),
+        "tracks_skipped": len(ranked_tracks) - len(kept),
+    }
+
 @app.get("/api/scrobbles/{username}/date-range")
 def scrobble_date_range(username: str, conn=Depends(get_db)):
     user_id = storage.upsert_user(conn, username)
@@ -203,11 +246,14 @@ def scrobble_lifted_top_tracks(
     window_start = date.fromisoformat(from_date).toordinal() if from_date else span_start
     window_end = date.fromisoformat(to_date).toordinal() if to_date else span_end
 
+    fitted = storage.get_user_lift_params(conn, user_id)
+    kwargs = {"alpha": fitted["alpha"], "beta": fitted["beta"]} if fitted else {}
+
     series = storage.get_song_daily_series(conn, user_id)
     results = propLiftEngine.compute_lift(
-        series, span_start, span_end, window_start, window_end, limit=limit
+        series, span_start, span_end, window_start, window_end, limit=limit, **kwargs
     )
-    return {"lifted_top_tracks": results}
+    return {"lifted_top_tracks": results, "using_fitted_params": fitted is not None}
 
 @app.get("/")
 def index():

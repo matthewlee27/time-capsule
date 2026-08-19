@@ -83,3 +83,55 @@ def test_get_top_tracks_artist_cap_limits_per_artist(conn):
     assert [(t["artist"], t["track"]) for t in capped] == [
         ("A", "A0"), ("B", "B0"), ("C", "C0"),
     ]
+
+
+def test_track_ranking_round_trips(conn):
+    user_id = storage.upsert_user(conn, "alice")
+    ranked = [{"artist": "A", "track": "Best"}, {"artist": "B", "track": "Worst"}]
+
+    storage.save_track_ranking(conn, user_id, 100, 200, ranked)
+    result = storage.get_track_ranking(conn, user_id, 100, 200)
+
+    assert [(r["artist"], r["track"], r["rank"]) for r in result] == [
+        ("A", "Best", 0), ("B", "Worst", 1),
+    ]
+
+
+def test_get_track_ranking_empty_for_unsaved_range(conn):
+    user_id = storage.upsert_user(conn, "alice")
+    assert storage.get_track_ranking(conn, user_id, None, None) == []
+
+
+def test_user_lift_params_round_trip(conn):
+    user_id = storage.upsert_user(conn, "alice")
+    storage.save_user_lift_params(conn, user_id, 100, 200, alpha=1.8, beta=0.4, loss=0.02)
+
+    result = storage.get_user_lift_params(conn, user_id)
+
+    assert result["alpha"] == 1.8
+    assert result["beta"] == 0.4
+    assert result["loss"] == 0.02
+
+
+def test_get_user_lift_params_returns_most_recent_fit_across_ranges(conn):
+    user_id = storage.upsert_user(conn, "alice")
+    storage.save_user_lift_params(conn, user_id, 100, 200, alpha=1.0, beta=1.0)
+    storage.save_user_lift_params(conn, user_id, None, None, alpha=2.0, beta=0.5)
+
+    result = storage.get_user_lift_params(conn, user_id)
+
+    assert (result["alpha"], result["beta"]) == (2.0, 0.5)
+
+
+def test_save_user_lift_params_replaces_for_same_range(conn):
+    user_id = storage.upsert_user(conn, "alice")
+    storage.save_user_lift_params(conn, user_id, 100, 200, alpha=1.0, beta=1.0)
+    storage.save_user_lift_params(conn, user_id, 100, 200, alpha=2.0, beta=0.5)
+
+    row_count = conn.execute(
+        "SELECT COUNT(*) FROM user_lift_params WHERE user_id = ?", (user_id,)
+    ).fetchone()[0]
+
+    assert row_count == 1
+    result = storage.get_user_lift_params(conn, user_id)
+    assert (result["alpha"], result["beta"]) == (2.0, 0.5)
