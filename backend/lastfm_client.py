@@ -56,17 +56,18 @@ class LastFmClient:
         and public."""
         self._get(method="user.getrecenttracks", user=username, limit=1)
 
-    def fetch_recent_tracks(
+    def fetch_pages(
         self,
         username: str,
         from_ts: Optional[int] = None,
         to_ts: Optional[int] = None,
-    ) -> Iterator[Dict]:
-        """Yields scrobble rows across the full paginated range, optionally
+    ) -> Iterator[list]:
+        """Yields one list of scrobble rows per Last.fm page, optionally
         bounded by from_ts/to_ts (UNIX seconds) — this is what lets an
         engine like plumb_and_dump query an arbitrary day/month, which
         Spotify's API can't do. Skips the "now playing" entry, which has
-        no timestamp."""
+        no timestamp. Exposed page-by-page (rather than flattened) so
+        callers can report progress at each sleep/wakeup between pages."""
         page = 1
         total_pages = 1
         while page <= total_pages:
@@ -81,20 +82,33 @@ class LastFmClient:
             recent = data["recenttracks"]
             total_pages = int(recent["@attr"]["totalPages"])
 
+            page_tracks = []
             for track in recent.get("track", []):
                 if track.get("@attr", {}).get("nowplaying") == "true":
                     continue
                 date = track.get("date")
                 if not date:
                     continue
-                yield {
+                page_tracks.append({
                     "artist": track["artist"]["#text"],
                     "track": track["name"],
                     "album": (track.get("album") or {}).get("#text") or None,
                     "mbid": track.get("mbid") or None,
                     "played_at": int(date["uts"]),
-                }
+                })
+            yield page_tracks
 
             page += 1
             if page <= total_pages:
                 time.sleep(RATE_LIMIT_DELAY)
+
+    def fetch_recent_tracks(
+        self,
+        username: str,
+        from_ts: Optional[int] = None,
+        to_ts: Optional[int] = None,
+    ) -> Iterator[Dict]:
+        """Flattened view of fetch_pages — yields individual scrobble rows
+        across the full paginated range."""
+        for page_tracks in self.fetch_pages(username, from_ts, to_ts):
+            yield from page_tracks

@@ -1,10 +1,12 @@
+import json
+import random
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -43,6 +45,15 @@ class PullRequest(BaseModel):
     from_date: Optional[str] = None  # "YYYY-MM-DD"
     to_date: Optional[str] = None
 
+PULL_PROGRESS_PHRASES = [
+    "Pulled {n} scrobbles",
+    "Fetched {n} more scrobbles",
+    "Scavenged for another {n} scrobbles",
+    "Dug for an additional {n} scrobbles",
+    "Heisted {n} extra stored scrobbles",
+    "Supplementing with {n} auxilary scrobbles",
+]
+
 def _to_unix(date_str: Optional[str]) -> Optional[int]:
     if not date_str:
         return None
@@ -70,22 +81,36 @@ def pull(req: PullRequest, conn=Depends(get_db)):
     from_ts = _to_unix(req.from_date)
     to_ts = _to_unix(req.to_date)
 
-    try:
-        tracks = list(lastfm.fetch_recent_tracks(req.username, from_ts, to_ts))
-    except UserNotFound:
-        raise HTTPException(404, "No Last.fm user with that username")
-    except HistoryHidden:
-        raise HTTPException(403, "This user's recent listening history is private")
-    except LastFmError as e:
-        raise HTTPException(502, str(e))
+    def stream():
+        all_tracks = []
+        try:
+            for page_tracks in lastfm.fetch_pages(req.username, from_ts, to_ts):
+                all_tracks.extend(page_tracks)
+                phrase = random.choice(PULL_PROGRESS_PHRASES)
+                yield json.dumps({
+                    "type": "progress",
+                    "message": phrase.format(n=len(page_tracks)),
+                }) + "\n"
+        except UserNotFound:
+            yield json.dumps({"type": "error", "detail": "No Last.fm user with that username"}) + "\n"
+            return
+        except HistoryHidden:
+            yield json.dumps({"type": "error", "detail": "This user's recent listening history is private"}) + "\n"
+            return
+        except LastFmError as e:
+            yield json.dumps({"type": "error", "detail": str(e)}) + "\n"
+            return
 
-    result = storage.save_scrobbles(conn, user_id, tracks)
-    return {
-        "pulled_from_lastfm": len(tracks),
-        "saved": result["saved"],
-        "duplicates": result["duplicates"],
-        "total_stored": storage.scrobble_count(conn, user_id),
-    }
+        result = storage.save_scrobbles(conn, user_id, all_tracks)
+        yield json.dumps({
+            "type": "done",
+            "pulled_from_lastfm": len(all_tracks),
+            "saved": result["saved"],
+            "duplicates": result["duplicates"],
+            "total_stored": storage.scrobble_count(conn, user_id),
+        }) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 @app.get("/api/scrobbles/{username}")
 def list_scrobbles(

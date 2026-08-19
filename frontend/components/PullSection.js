@@ -23,15 +23,46 @@ export default function PullSection({ username, initialStatus, onPulled }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, from_date: null, to_date: null }),
       });
-      const data = await res.json();
 
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Pull failed");
       }
 
-      setLastPull(data);
-      onPulled?.(data);
-      setStatus(formatPullStatus(data));
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, newlineIndex);
+          buffer = buffer.slice(newlineIndex + 1);
+          if (!line.trim()) continue;
+
+          const event = JSON.parse(line);
+          if (event.type === "progress") {
+            setStatus(event.message);
+          } else if (event.type === "error") {
+            throw new Error(event.detail || "Pull failed");
+          } else if (event.type === "done") {
+            finalData = event;
+          }
+        }
+      }
+
+      if (!finalData) {
+        throw new Error("Pull failed");
+      }
+
+      setLastPull(finalData);
+      onPulled?.(finalData);
+      setStatus(formatPullStatus(finalData));
     } catch (err) {
       setStatus(err.message);
     }
