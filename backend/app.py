@@ -18,7 +18,7 @@ app = FastAPI(title="Time Capsule")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "https://time-capsule-two-xi.vercel.app"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
